@@ -92,7 +92,7 @@ async def analyze_audio_task(incident_id: str, file_bytes: bytes, content_type: 
     }
     """
     model = genai.GenerativeModel("gemini-2.5-flash")
-    
+    # New Test
     try:
         response = model.generate_content([{"mime_type": content_type, "data": file_bytes}, prompt])
         clean_text = response.text.replace("```json", "").replace("```", "").strip()
