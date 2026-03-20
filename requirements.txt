@@ -1,4 +1,4 @@
-fastapi==0.103.2fastapi
+fastapi
 uvicorn
 python-multipart
 google-generativeai
@@ -9,5 +9,4 @@ google-cloud-firestore
 pytest
 httpx
 itsdangerous
-==1.0.0
 pydantic==2.4.2
