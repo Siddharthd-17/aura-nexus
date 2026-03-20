@@ -139,15 +139,17 @@ def get_responders():
     conn.close(); return data
 
 @app.post("/dispatch")
-async def process_dispatch(bg_tasks: BackgroundTasks, audio_file: UploadFile = File(...), lat: float = Form(...), lng: float = Form(...)):
-    file_bytes = await audio_file.read()
+async def process_dispatch(bg_tasks: BackgroundTasks, audio_file: UploadFile = File(None), text: str = Form(None), lat: float = Form(...), lng: float = Form(...)):
     incident_id = str(uuid.uuid4())
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    # Save audio to persistent storage
-    filepath = os.path.join("recordings", f"{incident_id}.webm")
-    with open(filepath, "wb") as f:
-        f.write(file_bytes)
+    file_bytes = None
+    if audio_file:
+        file_bytes = await audio_file.read()
+        # Save audio to persistent storage
+        filepath = os.path.join("recordings", f"{incident_id}.webm")
+        with open(filepath, "wb") as f:
+            f.write(file_bytes)
     
     # Auto-find nearest responder instantly
     conn = sqlite3.connect('emergencies.db'); cursor = conn.cursor()
@@ -161,16 +163,22 @@ async def process_dispatch(bg_tasks: BackgroundTasks, audio_file: UploadFile = F
     traffic = ["Heavy traffic in city center", "Clear roads", "Minor congestion", "Signal delays"][int(time.time()) % 4]
     
     # Create incident STUB instantly
+    status = "ANALYZING" if file_bytes else "DISPATCHED"
+    summary = "Acoustic Hub Processing..." if file_bytes else (text[:30] + "..." if text else "Text Emergency")
+    transcript = "[Analyzing audio telemetry...]" if file_bytes else (text or "Manual text alert.")
+    cat = "PENDING" if file_bytes else "RESCUE"
+    
     cursor.execute("INSERT INTO incidents VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                   (incident_id, lat, lng, "PENDING", 0.5, "Acoustic Intelligence Hub Processing...", 
-                    "[Analyzing audio telemetry...]", "[]", False, "ANALYZING", 
+                   (incident_id, lat, lng, cat, 0.5, summary, 
+                    transcript, "[]", False, status, 
                     nearest[0] if nearest else None, 0.0, "Real-time reasoning in progress...", ts, traffic))
     conn.commit(); conn.close()
     
-    # Queue Gemini analysis in background
-    bg_tasks.add_task(analyze_audio_task, incident_id, file_bytes, audio_file.content_type or "audio/webm")
+    if file_bytes:
+        # Queue Gemini analysis in background
+        bg_tasks.add_task(analyze_audio_task, incident_id, file_bytes, audio_file.content_type or "audio/webm")
     
-    return {"incident_id": incident_id, "status": "ANALYZING"}
+    return {"incident_id": incident_id, "status": status}
 
 @app.post("/override_dispatch")
 def override_dispatch(incident_id: str = Form(...), status: str = Form(...)):

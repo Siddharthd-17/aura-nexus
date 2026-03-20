@@ -32,6 +32,15 @@
         }
 
         .signout { position: absolute; top: 20px; right: 20px; color: #ff4e50; text-decoration: none; font-size: 0.8em; border: 1px solid #ff4e50; padding: 5px 10px; border-radius: 4px; }
+        
+        .divider { margin: 25px 0; border-bottom: 1px solid #333; position: relative; }
+        .divider::after { content: "OR USE TEXT"; position: absolute; top: -8px; left: 50%; transform: translateX(-50%); background: #1f2833; padding: 0 10px; font-size: 0.6em; color: #888; }
+        
+        #textAreaContainer { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+        #emergencyText { background: #0b0c10; border: 1px solid #45a29e; border-radius: 8px; color: #66fcf1; padding: 12px; font-family: inherit; font-size: 0.9em; resize: none; outline: none; height: 80px; transition: border-color 0.3s; }
+        #emergencyText:focus { border-color: #66fcf1; }
+        #sendTextBtn { background: #45a29e; color: #0b0c10; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: background 0.3s; }
+        #sendTextBtn:hover { background: #66fcf1; }
     </style>
 </head>
 <body>
@@ -48,6 +57,14 @@
         </div>
 
         <canvas id="visualizer"></canvas>
+
+        <div class="divider"></div>
+
+        <div id="textAreaContainer">
+            <textarea id="emergencyText" placeholder="Briefly describe the emergency..."></textarea>
+            <button id="sendTextBtn" onclick="sendTextData()">SEND TEXT REPORT</button>
+        </div>
+
         <div id="status">Ready</div>
         <div id="debug"></div>
     </div>
@@ -220,6 +237,39 @@
                     statusDiv.innerHTML = `SUCCESS.<br>ID: ${data.incident_id.substring(0,8)}`;
                     statusDiv.className = "success";
                     guideText.textContent = "Tap to start new";
+                } else {
+                    statusDiv.textContent = "Server error.";
+                    statusDiv.className = "error";
+                }
+            } catch (err) {
+                statusDiv.textContent = "Network error.";
+                statusDiv.className = "error";
+            }
+        }
+
+        async function sendTextData() {
+            const text = document.getElementById('emergencyText').value.trim();
+            if (!text) {
+                statusDiv.textContent = "Please enter text first.";
+                statusDiv.className = "error";
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('text', text);
+            formData.append('lat', lat);
+            formData.append('lng', lng);
+
+            statusDiv.textContent = "SENDING SECURE TEXT...";
+            statusDiv.className = "";
+
+            try {
+                const response = await fetch('/dispatch', { method: 'POST', body: formData });
+                if (response.ok) {
+                    const data = await response.json();
+                    statusDiv.innerHTML = `SUCCESS.<br>ID: ${data.incident_id.substring(0,8)}`;
+                    statusDiv.className = "success";
+                    document.getElementById('emergencyText').value = "";
                 } else {
                     statusDiv.textContent = "Server error.";
                     statusDiv.className = "error";
