@@ -13,6 +13,7 @@
         #recordBtn.recording .mic-icon { fill: #66fcf1; }
         
         h1 { font-size: 1.5em; color: #66fcf1; margin: 0; }
+        #version { font-size: 10px; color: #45a29e; margin-bottom: 5px; opacity: 0.7; }
         p { font-size: 0.9em; margin: 10px 0 20px; color: #c5c6c7; }
         
         #timer { font-family: monospace; font-size: 1.2em; color: #66fcf1; margin-bottom: 10px; display: none; }
@@ -37,6 +38,7 @@
     <a href="/" class="signout">SIGN OUT</a>
     <div class="container">
         <h1>AURA NEXUS</h1>
+        <div id="version">Build: v1.3.1 (Live Debug)</div>
         <p id="guideText">Tap to start recording</p>
         
         <div id="timer">00:00</div>
@@ -59,10 +61,17 @@
         let timerInterval;
 
         window.addEventListener('load', () => {
+            log("App Load. Secure: " + window.isSecureContext);
             if (!window.isSecureContext) {
-                log("⚠️ WARNING: Not a Secure Context (HTTPS). Microphone will NOT work.");
-                statusDiv.textContent = "Error: HTTPS Required";
+                log("⛔ CRITICAL: INSECURE CONTEXT. MIC BLOCKED.");
+                statusDiv.innerHTML = "<b style='color:#ff4e50'>ERROR: HTTPS REQUIRED</b><br>Browser blocks mic on http://";
                 statusDiv.className = "error";
+                btn.style.opacity = "0.3";
+                btn.style.pointerEvents = "none";
+            }
+            if (!navigator.mediaDevices) {
+                log("⛔ CRITICAL: navigator.mediaDevices is UNDEFINED.");
+                statusDiv.innerHTML += "<br>Media API Missing.";
             }
         });
 
