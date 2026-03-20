@@ -121,6 +121,10 @@
         }
 
         async function startTestRecording() {
+            if (!navigator.mediaDevices) {
+                testStatus.textContent = "Err: HTTPS Required for Mic";
+                return;
+            }
             playBeep(880, 0.1);
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });

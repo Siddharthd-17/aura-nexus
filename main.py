@@ -34,7 +34,10 @@ app.mount("/recordings", StaticFiles(directory="recordings"), name="recordings")
 # Configure Gemini
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 if GEMINI_API_KEY:
+    print(f"DEBUG: GEMINI_API_KEY detected (Length: {len(GEMINI_API_KEY)})")
     genai.configure(api_key=GEMINI_API_KEY)
+else:
+    print("WARNING: GEMINI_API_KEY NOT FOUND in environment!")
 
 def init_db():
     conn = sqlite3.connect('emergencies.db')

@@ -58,6 +58,14 @@
         let recordingStartTime;
         let timerInterval;
 
+        window.addEventListener('load', () => {
+            if (!window.isSecureContext) {
+                log("⚠️ WARNING: Not a Secure Context (HTTPS). Microphone will NOT work.");
+                statusDiv.textContent = "Error: HTTPS Required";
+                statusDiv.className = "error";
+            }
+        });
+
         navigator.geolocation.getCurrentPosition(pos => {
             lat = pos.coords.latitude;
             lng = pos.coords.longitude;
@@ -122,6 +130,12 @@
         }
 
         async function startRecording() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                log("Err: MediaDevices missing. Use HTTPS.");
+                statusDiv.textContent = "HTTPS Required";
+                statusDiv.className = "error";
+                return;
+            }
             playBeep(880, 0.15); // High beep
             log("Starting...");
             try {
