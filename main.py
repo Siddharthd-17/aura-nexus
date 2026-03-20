@@ -6,10 +6,12 @@ import math
 import traceback
 import time
 from datetime import datetime
-from fastapi import FastAPI, UploadFile, Form, File, HTTPException, BackgroundTasks
+from fastapi import FastAPI, UploadFile, Form, File, HTTPException, BackgroundTasks, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
+from google.cloud import storage, bigquery, firestore
 import google.generativeai as genai
 from dotenv import load_dotenv
 
@@ -23,18 +25,46 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(SessionMiddleware, secret_key=os.environ.get("SESSION_SECRET", "hackathon-secret-key-123"))
 
 # Ensure recordings directory exists
 if not os.path.exists("recordings"):
     os.makedirs("recordings")
 
-# Mount recordings as static files
+# Mount recordings (keep for local debugging, but cloud will use GCS)
 app.mount("/recordings", StaticFiles(directory="recordings"), name="recordings")
+
+# Initialize Cloud Clients (Will use ADC in Cloud Run)
+try:
+    GCS_CLIENT = storage.Client()
+    BQ_CLIENT = bigquery.Client()
+    DB_CLIENT = firestore.Client()
+    BUCKET_NAME = os.environ.get("GCS_BUCKET_NAME", "aura-nexus-recordings")
+    BQ_DATASET = os.environ.get("BQ_DATASET", "aura_nexus")
+except Exception as e:
+    print(f"DEBUG: Cloud Client init failed (Local mode suspected): {e}")
+    GCS_CLIENT = BQ_CLIENT = DB_CLIENT = None
 
 # Configure Gemini
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 if GEMINI_API_KEY:
+    print(f"DEBUG: GEMINI_API_KEY detected (Length: {len(GEMINI_API_KEY)})")
     genai.configure(api_key=GEMINI_API_KEY)
+else:
+    print("WARNING: GEMINI_API_KEY NOT FOUND in environment!")
+
+# Auth Dependency
+def get_current_user(request: Request):
+    user = request.session.get("user")
+    if not user:
+        raise HTTPException(status_code=303, detail="Not authenticated", headers={"Location": "/"})
+    return user
+
+async def admin_only(request: Request):
+    user = get_current_user(request)
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return user
 
 def init_db():
     conn = sqlite3.connect('emergencies.db')
@@ -116,17 +146,26 @@ def read_root():
     with open("login.html", "r") as f: return HTMLResponse(f.read())
 
 @app.post("/login")
-def login(username: str = Form(...), password: str = Form(...)):
-    if username == "admin" and password == "admin": return RedirectResponse("/admin", 303)
-    if username == "user" and password == "user": return RedirectResponse("/user", 303)
+def login(request: Request, username: str = Form(...), password: str = Form(...)):
+    if username == "admin" and password == "admin":
+        request.session["user"] = {"role": "admin", "name": "Admin"}
+        return RedirectResponse("/admin", 303)
+    if username == "user" and password == "user":
+        request.session["user"] = {"role": "user", "name": "User"}
+        return RedirectResponse("/user", 303)
     return HTMLResponse("Invalid credentials.", 401)
 
+@app.get("/logout")
+def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse("/", 303)
+
 @app.get("/admin")
-def admin_view():
+def admin_view(request: Request, user: dict = Depends(admin_only)):
     with open("admin.html", "r") as f: return HTMLResponse(f.read())
 
 @app.get("/user")
-def user_view():
+def user_view(request: Request, user: dict = Depends(get_current_user)):
     with open("user.html", "r") as f: return HTMLResponse(f.read())
 
 @app.get("/responders")
@@ -136,15 +175,25 @@ def get_responders():
     conn.close(); return data
 
 @app.post("/dispatch")
-async def process_dispatch(bg_tasks: BackgroundTasks, audio_file: UploadFile = File(...), lat: float = Form(...), lng: float = Form(...)):
-    file_bytes = await audio_file.read()
+async def process_dispatch(bg_tasks: BackgroundTasks, audio_file: UploadFile = File(None), text: str = Form(None), lat: float = Form(...), lng: float = Form(...)):
     incident_id = str(uuid.uuid4())
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    # Save audio to persistent storage
-    filepath = os.path.join("recordings", f"{incident_id}.webm")
-    with open(filepath, "wb") as f:
-        f.write(file_bytes)
+    file_bytes = None
+    if audio_file:
+        file_bytes = await audio_file.read()
+        # 1. Save locally (fallback)
+        filepath = os.path.join("recordings", f"{incident_id}.webm")
+        with open(filepath, "wb") as f: f.write(file_bytes)
+        
+        # 2. Upload to Cloud Storage (Professional Grade)
+        if GCS_CLIENT:
+            try:
+                bucket = GCS_CLIENT.bucket(BUCKET_NAME)
+                blob = bucket.blob(f"recordings/{incident_id}.webm")
+                blob.upload_from_string(file_bytes, content_type=audio_file.content_type or "audio/webm")
+                print(f"DEBUG: Uploaded {incident_id} to GCS bucket {BUCKET_NAME}")
+            except Exception as e: print(f"DEBUG: GCS Upload failed: {e}")
     
     # Auto-find nearest responder instantly
     conn = sqlite3.connect('emergencies.db'); cursor = conn.cursor()
@@ -158,16 +207,41 @@ async def process_dispatch(bg_tasks: BackgroundTasks, audio_file: UploadFile = F
     traffic = ["Heavy traffic in city center", "Clear roads", "Minor congestion", "Signal delays"][int(time.time()) % 4]
     
     # Create incident STUB instantly
-    cursor.execute("INSERT INTO incidents VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                   (incident_id, lat, lng, "PENDING", 0.5, "Acoustic Intelligence Hub Processing...", 
-                    "[Analyzing audio telemetry...]", "[]", False, "ANALYZING", 
-                    nearest[0] if nearest else None, 0.0, "Real-time reasoning in progress...", ts, traffic))
+    status = "ANALYZING" if file_bytes else "DISPATCHED"
+    summary = "Acoustic Hub Processing..." if file_bytes else (text[:30] + "..." if text else "Text Emergency")
+    transcript = "[Analyzing audio telemetry...]" if file_bytes else (text or "Manual text alert.")
+    cat = "PENDING" if file_bytes else "RESCUE"
+    
+    incident_data = (incident_id, lat, lng, cat, 0.5, summary, 
+                    transcript, "[]", False, status, 
+                    nearest[0] if nearest else None, 0.0, "Real-time reasoning in progress...", ts, traffic)
+    
+    cursor.execute("INSERT INTO incidents VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", incident_data)
     conn.commit(); conn.close()
     
-    # Queue Gemini analysis in background
-    bg_tasks.add_task(analyze_audio_task, incident_id, file_bytes, audio_file.content_type or "audio/webm")
+    # 3. Log to BigQuery (Analytical Audit Trail)
+    if BQ_CLIENT:
+        try:
+            table_id = f"{BQ_CLIENT.project}.{BQ_DATASET}.incidents"
+            row = {"id": incident_id, "lat": lat, "lng": lng, "category": cat, "urgency": 0.5, "status": status, "timestamp": ts}
+            BQ_CLIENT.insert_rows_json(table_id, [row])
+            print(f"DEBUG: Logged incident {incident_id} to BigQuery")
+        except Exception as e: print(f"DEBUG: BigQuery log failed: {e}")
+
+    # 4. Update Firestore (Real-time Live Feed)
+    if DB_CLIENT:
+        try:
+            doc_ref = DB_CLIENT.collection("incidents").document(incident_id)
+            doc_ref.set({"lat": lat, "lng": lng, "category": cat, "status": status, "timestamp": ts, 
+                         "responder_id": nearest[0] if nearest else None})
+            print(f"DEBUG: Published incident {incident_id} to Firestore")
+        except Exception as e: print(f"DEBUG: Firestore update failed: {e}")
+
+    if file_bytes:
+        # Queue Gemini analysis in background
+        bg_tasks.add_task(analyze_audio_task, incident_id, file_bytes, audio_file.content_type or "audio/webm")
     
-    return {"incident_id": incident_id, "status": "ANALYZING"}
+    return {"incident_id": incident_id, "status": status, "responder_id": nearest[0] if nearest else None}
 
 @app.post("/override_dispatch")
 def override_dispatch(incident_id: str = Form(...), status: str = Form(...)):

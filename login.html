@@ -1,28 +1,59 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Aura Nexus - Login</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aura Nexus - Secure Access</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0b0c10; color: #c5c6c7; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .login-box { background: #1f2833; padding: 40px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); width: 300px; text-align: center; border-left: 5px solid #45a29e; }
-        h2 { color: #66fcf1; margin-top: 0; }
-        input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #0b0c10; border-radius: 4px; box-sizing: border-box; background: #0b0c10; color: #c5c6c7; font-size: 16px;}
-        input:focus { outline: none; border-color: #66fcf1; }
-        button { width: 100%; padding: 12px; background: #45a29e; color: #0b0c10; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 15px; font-size: 16px;}
-        button:hover { background: #66fcf1; }
-        .hint { font-size: 0.9em; color: #aaa; margin-top: 25px; }
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap');
+        
+        body { margin: 0; background: radial-gradient(circle at center, #1f2833 0%, #0b0c10 100%); color: #66fcf1; font-family: 'Outfit', sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; overflow: hidden; }
+        
+        .glass-box { background: rgba(31, 40, 51, 0.7); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); border: 1px solid rgba(102, 252, 241, 0.2); border-radius: 24px; padding: 50px; width: 340px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); text-align: center; transform: translateY(0); transition: transform 0.3s ease; }
+        .glass-box:hover { transform: translateY(-5px); }
+        
+        .logo-ring { width: 80px; height: 80px; margin: 0 auto 30px; border: 3px solid #45a29e; border-radius: 50%; display: flex; align-items: center; justify-content: center; position: relative; animation: pulse-ring 2s infinite; }
+        @keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(102, 252, 241, 0.4); } 70% { box-shadow: 0 0 0 15px rgba(102, 252, 241, 0); } 100% { box-shadow: 0 0 0 0 rgba(102, 252, 241, 0); } }
+        
+        h1 { margin: 0; font-weight: 600; letter-spacing: 4px; color: #66fcf1; font-size: 1.8em; }
+        p.subtitle { color: #8892b0; font-size: 0.9em; margin-bottom: 40px; }
+        
+        .input-group { margin-bottom: 20px; text-align: left; }
+        label { display: block; font-size: 0.75em; color: #45a29e; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; font-weight: 600; }
+        input { width: 100%; background: rgba(11, 12, 16, 0.8); border: 1px solid #1f2833; border-radius: 12px; padding: 14px; color: #66fcf1; font-size: 1em; box-sizing: border-box; transition: all 0.3s; outline: none; }
+        input:focus { border-color: #66fcf1; box-shadow: 0 0 10px rgba(102, 252, 241, 0.2); background: rgba(11, 12, 16, 1); }
+        
+        button { width: 100%; background: linear-gradient(135deg, #45a29e 0%, #66fcf1 100%); color: #0b0c10; border: none; padding: 16px; border-radius: 12px; font-weight: 600; cursor: pointer; font-size: 1.1em; margin-top: 10px; transition: all 0.3s; text-transform: uppercase; letter-spacing: 1px; }
+        button:hover { filter: brightness(1.1); transform: scale(1.02); box-shadow: 0 0 20px rgba(102, 252, 241, 0.3); }
+        
+        .hint { margin-top: 30px; font-size: 0.8em; color: #8892b0; line-height: 1.6; }
         .hint b { color: #66fcf1; }
     </style>
 </head>
 <body>
-    <div class="login-box">
-        <h2>AURA NEXUS</h2>
+    <div class="glass-box">
+        <div class="logo-ring">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#66fcf1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        </div>
+        <h1>AURA NEXUS</h1>
+        <p class="subtitle">UNIVERSAL EMERGENCY BRIDGE</p>
+        
         <form action="/login" method="POST">
-            <input type="text" name="username" placeholder="Username" required>
-            <input type="password" name="password" placeholder="Password" required>
-            <button type="submit">ENTER SYSTEM</button>
+            <div class="input-group">
+                <label for="user">Operational ID</label>
+                <input type="text" id="user" name="username" placeholder="e.g. Responder-007" required aria-label="Username">
+            </div>
+            <div class="input-group">
+                <label for="pass">Security Key</label>
+                <input type="password" id="pass" name="password" placeholder="••••••••" required aria-label="Password">
+            </div>
+            <button type="submit">AUTHENTICATE ACCESS</button>
         </form>
-        <div class="hint">Admins use <b>admin</b>/<b>admin</b><br>Users use <b>user</b>/<b>user</b></div>
+        
+        <div class="hint">
+            Authorized Personnel Only.<br>
+            Registry: <b>admin</b>/<b>admin</b> or <b>user</b>/<b>user</b>
+        </div>
     </div>
 </body>
 </html>
