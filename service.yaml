@@ -1,0 +1,14 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: aura-nexus-edge
+spec:
+  template:
+    spec:
+      containers:
+      - image: gcr.io/YOUR_PROJECT_ID/aura-nexus-image:latest # REPLACE WITH YOUR GOOGLE CLOUD REGISTRY URL
+        ports:
+        - containerPort: 8080
+        env:
+        - name: GEMINI_API_KEY
+          value: "YOUR_API_KEY_HERE" # It is better practice to map this via Secret Manager

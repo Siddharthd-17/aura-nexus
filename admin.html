@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Aura Nexus - Crisis Center (India)</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        body { margin: 0; padding: 0; display: flex; font-family: 'Segoe UI', sans-serif; height: 100vh; background: #0b0c10; color: #c5c6c7; overflow: hidden;}
+        #map { flex: 1; height: 100%; border-left: 1px solid #1f2833; }
+        #sidebar { width: 450px; background: #1f2833; overflow-y: auto; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column;}
+        
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #45a29e; padding-bottom: 15px; margin-bottom: 20px;}
+        h2 { color: #66fcf1; margin: 0; font-size: 1.2em;}
+        .top-btns { display: flex; gap: 10px; align-items: center; }
+        .btn-small { color: #66fcf1; text-decoration: none; font-size: 0.75em; border: 1px solid #45a29e; padding: 5px 10px; border-radius: 4px; cursor: pointer; background: transparent; }
+        .btn-small:hover { background: rgba(102, 252, 241, 0.1); }
+        .signout { color: #ff4e50; border-color: #ff4e50; }
+
+        .incident { background: #0b0c10; padding: 15px; margin-bottom: 20px; border-radius: 8px; border-left: 5px solid #ff4e50; font-size: 0.9em; position: relative; transition: all 0.3s;}
+        .incident.dispatched { border-left-color: #66fcf1; }
+        .incident.analyzing { border-left-color: #45a29e; animation: scan 1.5s infinite; }
+        .incident.overridden { border-left-color: #888; opacity: 0.6; }
+        
+        @keyframes scan { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        .timestamp { font-size: 0.75em; color: #888; margin-top: 5px; font-family: monospace;}
+        
+        .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px;}
+        .stat { background: #1f2833; padding: 8px; border-radius: 4px; border: 1px solid #333;}
+        .stat-label { font-size: 0.65em; color: #888; text-transform: uppercase;}
+        .stat-val { font-weight: bold; color: #66fcf1; font-size: 0.9em;}
+        .transcript { background: #111; padding: 10px; margin-top: 10px; border-radius: 4px; font-style: italic; color: #aaa; border: 1px solid #222; max-height: 60px; overflow-y: auto;}
+        .traffic-box { background: rgba(102, 252, 241, 0.05); border: 1px solid rgba(102, 252, 241, 0.2); padding: 8px; margin-top: 10px; border-radius: 4px; font-size: 0.8em; color: #66fcf1; display: flex; align-items: center;}
+        .traffic-box::before { content: "🚦"; margin-right: 8px; }
+
+        .override-btn { width: 100%; padding: 10px; background: #ff4e50; color: #0b0c10; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 15px; font-size: 0.8em;}
+        .override-btn.recall { background: #aaa; }
+
+        /* Modal / Test Tool */
+        #testOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 9999; display: none; align-items: center; justify-content: center; flex-direction: column;}
+        .test-box { background: #1f2833; padding: 30px; border-radius: 12px; border: 1px solid #66fcf1; width: 400px; text-align: center; }
+        #testBtn { width: 80px; height: 80px; border-radius: 50%; border: 3px solid #ff4e50; background: transparent; cursor: pointer; margin: 20px auto; display: flex; align-items: center; justify-content: center;}
+        #testBtn.active { border-color: #66fcf1; box-shadow: 0 0 15px #66fcf1; }
+        #testResult { text-align: left; margin-top: 20px; font-size: 0.85em; background: #0b0c10; padding: 15px; border-radius: 8px; display: none; border: 1px solid #333;}
+        #testTimer { font-family: monospace; font-size: 1.2em; color: #66fcf1; margin-bottom: 10px; display: none; }
+
+        /* Icon Styles */
+        .victim-pulse { border-radius: 50%; width: 20px; height: 20px; background: #ff4e50; box-shadow: 0 0 0 0 rgba(255, 78, 80, 1); animation: pulsing 1.5s infinite; }
+        .resp-marker { width: 30px; height: 30px; background: #66fcf1; border: 2px solid #0b0c10; display: flex; align-items: center; justify-content: center; color: #0b0c10; font-weight: bold; font-size: 10px; border-radius: 4px; clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%); }
+        @keyframes pulsing { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 78, 80, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(255, 78, 80, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 78, 80, 0); } }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <div class="header">
+            <h2>Crisis Center - India</h2>
+            <div class="top-btns">
+                <button class="btn-small" onclick="showTestTool()">TEST ENGINE</button>
+                <a href="/" class="btn-small signout">LOGOUT</a>
+            </div>
+        </div>
+        <div id="feed"><i>Monitoring live telemetry...</i></div>
+    </div>
+    <div id="map"></div>
+
+    <div id="testOverlay" onclick="if(event.target === this) hideTestTool()">
+        <div class="test-box">
+            <h3>Diagnostic Tool</h3>
+            <p style="font-size:0.8em; color:#aaa;" id="testGuide">Tap to start recording</p>
+            <div id="testTimer">00:00</div>
+            <div id="testBtn">
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="#ff4e50"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+            </div>
+            <div id="testStatus">Ready</div>
+            <div id="testResult"></div>
+            <button class="btn-small" style="margin-top:20px; width:100%" onclick="hideTestTool()">CLOSE</button>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script>
+        const map = L.map('map').setView([20.5937, 78.9629], 5);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+
+        const activeIncidents = {};
+        const activeResponders = {};
+        const respMarkers = {};
+
+        // Diagnostic Logic
+        let mediaRecorder;
+        let audioChunks = [];
+        let rStart;
+        let rInterval;
+        const testOverlay = document.getElementById('testOverlay');
+        const testBtn = document.getElementById('testBtn');
+        const testStatus = document.getElementById('testStatus');
+        const testResult = document.getElementById('testResult');
+        const testGuide = document.getElementById('testGuide');
+        const testTimer = document.getElementById('testTimer');
+
+        function showTestTool() { testOverlay.style.display = 'flex'; testResult.style.display = 'none'; testGuide.textContent = 'Tap to record'; }
+        function hideTestTool() { testOverlay.style.display = 'none'; }
+
+        function playBeep(freq, duration = 0.1) {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const v = ctx.createOscillator();
+                const g = ctx.createGain();
+                v.type = "sine"; v.frequency.value = freq;
+                g.gain.setValueAtTime(0.1, ctx.currentTime);
+                g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+                v.connect(g); g.connect(ctx.destination);
+                v.start(); v.stop(ctx.currentTime + duration);
+            } catch(e) {}
+        }
+
+        async function toggleTestRecording() {
+            if (mediaRecorder && mediaRecorder.state === "recording") {
+                stopTestRecording();
+            } else {
+                startTestRecording();
+            }
+        }
+
+        async function startTestRecording() {
+            playBeep(880, 0.1);
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                let mimeType = 'audio/webm';
+                if (MediaRecorder.isTypeSupported('audio/mp4')) mimeType = 'audio/mp4';
+                else if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) mimeType = 'audio/webm;codecs=opus';
+                
+                mediaRecorder = new MediaRecorder(stream.clone(), { mimeType });
+                mediaRecorder.ondataavailable = e => { if(e.data.size > 0) audioChunks.push(e.data); };
+                mediaRecorder.onstop = sendTestAudio;
+                audioChunks = [];
+                mediaRecorder.start(100);
+                
+                testBtn.classList.add('active');
+                testStatus.textContent = "RECORDING...";
+                testGuide.textContent = "Tap to finish";
+                rStart = Date.now();
+                testTimer.style.display = 'block';
+                rInterval = setInterval(() => {
+                    const diff = Math.floor((Date.now() - rStart) / 1000);
+                    testTimer.textContent = `00:${diff.toString().padStart(2, '0')}`;
+                }, 1000);
+            } catch (err) { testStatus.textContent = "Error: " + err.message; }
+        }
+
+        function stopTestRecording() {
+            if(mediaRecorder && mediaRecorder.state === "recording") {
+                playBeep(440, 0.1);
+                mediaRecorder.stop();
+                mediaRecorder.stream.getTracks().forEach(t => t.stop());
+                testBtn.classList.remove('active');
+                testStatus.textContent = "PROCESSING...";
+                clearInterval(rInterval);
+            }
+        }
+
+        async function sendTestAudio() {
+            const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+            if (blob.size < 5000) {
+                testStatus.textContent = "Too short (" + blob.size + "b)";
+                return;
+            }
+            
+            const url = URL.createObjectURL(blob);
+            testResult.style.display = 'block';
+            testResult.innerHTML = `
+                <div style="margin-bottom:15px; border-bottom:1px solid #333; padding-bottom:10px;">
+                    <audio id="testPlayer" controls src="${url}" style="width:100%; height:30px;"></audio>
+                </div>
+            `;
+
+            const ext = mediaRecorder.mimeType.includes('mp4') ? 'mp4' : 'webm';
+            const formData = new FormData();
+            formData.append('audio_file', blob, `emergency.${ext}`);
+            formData.append('lat', 20.59); formData.append('lng', 78.96);
+
+            try {
+                const res = await fetch('/dispatch', { method: 'POST', body: formData });
+                const data = await res.json();
+                const resDiv = document.createElement('div');
+                resDiv.innerHTML = `<br><i>Fetching AI results...</i>`;
+                testResult.appendChild(resDiv);
+                
+                let att = 0;
+                const check = setInterval(async () => {
+                    const incRes = await fetch('/incidents');
+                    const incidents = await incRes.json();
+                    const myInc = incidents.find(i => i.id === data.incident_id);
+                    if(myInc && myInc.status !== 'ANALYZING') {
+                        resDiv.innerHTML = `
+                            <br><b style="color:#66fcf1">Extracted Text:</b><br>${myInc.transcript || "None"}<br><br>
+                            <b style="color:#66fcf1">Engine Reasoning:</b><br>${myInc.analysis}<br>
+                        `;
+                        clearInterval(check);
+                    }
+                    if(att++ > 15) { resDiv.innerHTML = "<br>Timeout."; clearInterval(check); }
+                }, 2000);
+            } catch (err) { testStatus.textContent = "Error: " + err; }
+        }
+
+        testBtn.onclick = toggleTestRecording;
+
+        async function fetchResponders() {
+            const res = await fetch('/responders');
+            const data = await res.json();
+            data.forEach(r => {
+                if(!activeResponders[r.id]) {
+                    activeResponders[r.id] = r;
+                    const icon = L.divIcon({className: 'custom-div-icon', html: `<div class='resp-marker'>${r.category.substring(0,1)}</div>`, iconSize: [30, 30]});
+                    respMarkers[r.id] = L.marker([r.lat, r.lng], {icon}).addTo(map);
+                }
+            });
+        }
+
+        async function overrideDispatch(id, status) {
+            const formData = new FormData(); formData.append('incident_id', id); formData.append('status', status === 'DISPATCHED' ? 'RECALLED' : 'DISPATCHED');
+            await fetch('/override_dispatch', { method: 'POST', body: formData });
+        }
+
+        function getDistance(lat1, lon1, lat2, lon2) {
+            const R=6371; const dLat=(lat2-lat1)*Math.PI/180; const dLon=(lon2-lon1)*Math.PI/180;
+            const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+            return R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        }
+
+        async function fetchIncidents() {
+            const res = await fetch('/incidents'); const data = await res.json();
+            const feed = document.getElementById('feed');
+            data.forEach(inc => {
+                if(!activeIncidents[inc.id] || activeIncidents[inc.id].status !== inc.status) {
+                    if(feed.querySelector('i')) feed.innerHTML = '';
+                    activeIncidents[inc.id] = inc;
+                    const existingDiv = document.getElementById(`inc-${inc.id}`); if(existingDiv) existingDiv.remove();
+
+                    const div = document.createElement('div'); div.id = `inc-${inc.id}`; div.className = `incident ${inc.status.toLowerCase()}`;
+                    const r = activeResponders[inc.responder_id];
+                    const d = r ? getDistance(inc.lat, inc.lng, r.lat, r.lng) : 0;
+                    
+                    const iconMap = {
+                        'POLICE': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
+                        'EMS': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S16 3.34 16 5v6c0 1.66 1.34 3 3 3z"/><path d="M22 17c0 2.76-2.24 5-5 5H7c-2.76 0-5-2.24-5-5V7c0-2.76 2.24-5 5-5s5 2.24 5 5"/></svg>',
+                        'FIRE': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.5 3.5 6.5 1.5 2 2 4.5 2 7a6 6 0 1 1-12 0c0-1.38.5-2.5 1-3.5.5.5 1 1 1.5 1.5z"/></svg>',
+                        'RESCUE': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>'
+                    };
+                    const icon = iconMap[inc.category] || '';
+
+                    div.innerHTML = `
+                        <div style="display:flex; justify-content: space-between; align-items:center;">
+                            <span style="display:flex; align-items:center; gap:5px; color:#66fcf1; font-weight:bold;">${icon} ${inc.category} ${inc.status}</span>
+                            <span class="timestamp">${inc.timestamp}</span>
+                        </div>
+                        <div class="stat-grid">
+                            <div class="stat"><div class="stat-label">Urgency</div><div class="stat-val">${Math.round(inc.urgency*100)}%</div></div>
+                            <div class="stat"><div class="stat-label">Dist (KM)</div><div class="stat-val">${d.toFixed(1)}</div></div>
+                            <div class="stat"><div class="stat-label">Unit</div><div class="stat-val">${r?r.name.split(' ').pop():'N/A'}</div></div>
+                        </div>
+                        <div class="transcript">"${inc.transcript || inc.summary}"</div>
+                        <div style="margin-top:10px;"><audio controls src="/recordings/${inc.id}.webm" style="width:100%; height:30px;"></audio></div>
+                        <div class="traffic-box">${inc.traffic}</div>
+                        ${inc.status === 'ANALYZING' ? '<div style="text-align:center;color:#45a29e;font-size:0.8em;margin-top:10px;">Acoustic Analysis In Progress...</div>' : 
+                          `<button class="override-btn ${inc.status==='DISPATCHED'?'recall':''}" onclick="overrideDispatch('${inc.id}', '${inc.status}')">${inc.status==='DISPATCHED'?'RECALL':'RESUME'}</button>`}
+                    `;
+                    feed.prepend(div);
+                    if(!inc.marker) inc.marker = L.marker([inc.lat, inc.lng], {icon: L.divIcon({className:'victim-pulse', iconSize:[20,20]})}).addTo(map);
+                }
+            });
+        }
+
+        setInterval(fetchResponders, 10000);
+        setInterval(fetchIncidents, 3000);
+        fetchResponders(); fetchIncidents();
+    </script>
+</body>
+</html>

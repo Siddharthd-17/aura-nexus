@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Aura Nexus - Login</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0b0c10; color: #c5c6c7; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .login-box { background: #1f2833; padding: 40px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); width: 300px; text-align: center; border-left: 5px solid #45a29e; }
+        h2 { color: #66fcf1; margin-top: 0; }
+        input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #0b0c10; border-radius: 4px; box-sizing: border-box; background: #0b0c10; color: #c5c6c7; font-size: 16px;}
+        input:focus { outline: none; border-color: #66fcf1; }
+        button { width: 100%; padding: 12px; background: #45a29e; color: #0b0c10; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 15px; font-size: 16px;}
+        button:hover { background: #66fcf1; }
+        .hint { font-size: 0.9em; color: #aaa; margin-top: 25px; }
+        .hint b { color: #66fcf1; }
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <h2>AURA NEXUS</h2>
+        <form action="/login" method="POST">
+            <input type="text" name="username" placeholder="Username" required>
+            <input type="password" name="password" placeholder="Password" required>
+            <button type="submit">ENTER SYSTEM</button>
+        </form>
+        <div class="hint">Admins use <b>admin</b>/<b>admin</b><br>Users use <b>user</b>/<b>user</b></div>
+    </div>
+</body>
+</html>

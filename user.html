@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Aura Nexus - Emergency Beacon</title>
+    <style>
+        body { margin: 0; background: #0b0c10; color: #45a29e; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; user-select: none; -webkit-user-select: none; }
+        .container { text-align: center; background: #1f2833; padding: 40px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 1px solid #45a29e; width: 320px; position: relative;}
+        
+        #recordBtn { width: 120px; height: 120px; border-radius: 50%; border: 4px solid #ff4e50; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.3s; margin: 20px auto; position: relative; z-index: 2; touch-action: none; }
+        #recordBtn.recording { border-color: #66fcf1; background: rgba(102, 252, 241, 0.1); animation: pulse 1.5s infinite; }
+        
+        .mic-icon { width: 40px; height: 40px; fill: #ff4e50; transition: fill 0.3s;}
+        #recordBtn.recording .mic-icon { fill: #66fcf1; }
+        
+        h1 { font-size: 1.5em; color: #66fcf1; margin: 0; }
+        p { font-size: 0.9em; margin: 10px 0 20px; color: #c5c6c7; }
+        
+        #timer { font-family: monospace; font-size: 1.2em; color: #66fcf1; margin-bottom: 10px; display: none; }
+        
+        #status { margin-top: 20px; font-size: 0.8em; min-height: 40px; padding: 10px; border-radius: 8px; font-weight: bold;}
+        .success { color: #66fcf1; background: rgba(102, 252, 241, 0.1); }
+        .error { color: #ff4e50; background: rgba(255, 78, 80, 0.1); }
+        
+        #visualizer { width: 100%; height: 40px; background: #0b0c10; margin: 10px 0; border-radius: 4px; display: none; }
+        #debug { font-size: 10px; color: #888; margin-top: 10px; height: 15px; overflow: hidden; }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(102, 252, 241, 0.4); }
+            70% { box-shadow: 0 0 0 20px rgba(102, 252, 241, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(102, 252, 241, 0); }
+        }
+
+        .signout { position: absolute; top: 20px; right: 20px; color: #ff4e50; text-decoration: none; font-size: 0.8em; border: 1px solid #ff4e50; padding: 5px 10px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <a href="/" class="signout">SIGN OUT</a>
+    <div class="container">
+        <h1>AURA NEXUS</h1>
+        <p id="guideText">Tap to start recording</p>
+        
+        <div id="timer">00:00</div>
+
+        <div id="recordBtn">
+            <svg class="mic-icon" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+        </div>
+
+        <canvas id="visualizer"></canvas>
+        <div id="status">Ready</div>
+        <div id="debug"></div>
+    </div>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let lat = 0, lng = 0;
+        let audioContext, analyser, dataArray, animationId;
+        let recordingStartTime;
+        let timerInterval;
+
+        navigator.geolocation.getCurrentPosition(pos => {
+            lat = pos.coords.latitude;
+            lng = pos.coords.longitude;
+        });
+
+        const btn = document.getElementById('recordBtn');
+        const statusDiv = document.getElementById('status');
+        const timerDiv = document.getElementById('timer');
+        const guideText = document.getElementById('guideText');
+        const debugDiv = document.getElementById('debug');
+        const canvas = document.getElementById('visualizer');
+        const canvasCtx = canvas.getContext('2d');
+
+        function log(msg) { debugDiv.textContent = msg; console.log(msg); }
+
+        function updateTimer() {
+            const now = Date.now();
+            const diff = Math.floor((now - recordingStartTime) / 1000);
+            const m = Math.floor(diff / 60).toString().padStart(2, '0');
+            const s = (diff % 60).toString().padStart(2, '0');
+            timerDiv.textContent = `${m}:${s}`;
+        }
+
+        function startVisualizer(stream) {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioContext.state === 'suspended') audioContext.resume();
+                const source = audioContext.createMediaStreamSource(stream);
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                source.connect(analyser);
+                
+                const bufferLength = analyser.frequencyBinCount;
+                dataArray = new Uint8Array(bufferLength);
+                canvas.style.display = 'block';
+
+                function draw() {
+                    animationId = requestAnimationFrame(draw);
+                    analyser.getByteFrequencyData(dataArray);
+                    canvasCtx.fillStyle = '#0b0c10';
+                    canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+                    
+                    const barWidth = (canvas.width / bufferLength) * 2.5;
+                    let x = 0;
+                    for(let i = 0; i < bufferLength; i++) {
+                        const barHeight = dataArray[i] / 4;
+                        canvasCtx.fillStyle = `rgb(102, 252, 241)`;
+                        canvasCtx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+                        x += barWidth + 1;
+                    }
+                }
+                draw();
+            } catch(e) { log("Viz error: " + e.message); }
+        }
+
+        async function toggleRecording() {
+            if (mediaRecorder && mediaRecorder.state === "recording") {
+                stopRecording();
+            } else {
+                startRecording();
+            }
+        }
+
+        async function startRecording() {
+            playBeep(880, 0.15); // High beep
+            log("Starting...");
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                startVisualizer(stream);
+                
+                let mimeType = 'audio/webm';
+                if (MediaRecorder.isTypeSupported('audio/mp4')) mimeType = 'audio/mp4';
+                else if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) mimeType = 'audio/webm;codecs=opus';
+                
+                log("Format: " + mimeType);
+                
+                mediaRecorder = new MediaRecorder(stream.clone(), { mimeType });
+                mediaRecorder.ondataavailable = e => { if(e.data.size > 0) audioChunks.push(e.data); };
+                mediaRecorder.onstop = sendData;
+                
+                audioChunks = [];
+                mediaRecorder.start(100);
+                
+                recordingStartTime = Date.now();
+                timerDiv.style.display = 'block';
+                timerInterval = setInterval(updateTimer, 1000);
+                
+                btn.classList.add('recording');
+                guideText.textContent = "Tap to finish";
+                statusDiv.textContent = "RECORDING LIVE...";
+                statusDiv.className = "";
+            } catch (err) {
+                log("Err: " + err.message);
+                statusDiv.textContent = "Mic access denied.";
+                statusDiv.className = "error";
+            }
+        }
+
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state === "recording") {
+                playBeep(440, 0.15); // Lower beep
+                mediaRecorder.stop();
+                mediaRecorder.stream.getTracks().forEach(t => t.stop());
+                
+                clearInterval(timerInterval);
+                cancelAnimationFrame(animationId);
+                if(audioContext) audioContext.close();
+                
+                btn.classList.remove('recording');
+                guideText.textContent = "Processing...";
+            }
+        }
+
+        async function sendData() {
+            const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+            log("Final size: " + audioBlob.size + " bytes");
+            
+            if (audioBlob.size < 5000) {
+                statusDiv.textContent = "Error: File too small (" + audioBlob.size + "b)";
+                statusDiv.className = "error";
+                guideText.textContent = "Tap to try again";
+                return;
+            }
+
+            const ext = mediaRecorder.mimeType.includes('mp4') ? 'mp4' : 'webm';
+            const formData = new FormData();
+            formData.append('audio_file', audioBlob, `emergency.${ext}`);
+            formData.append('lat', lat);
+            formData.append('lng', lng);
+
+            statusDiv.textContent = "ENCRYPTING & SENDING...";
+
+            try {
+                const response = await fetch('/dispatch', { method: 'POST', body: formData });
+                if (response.ok) {
+                    const data = await response.json();
+                    statusDiv.innerHTML = `SUCCESS.<br>ID: ${data.incident_id.substring(0,8)}`;
+                    statusDiv.className = "success";
+                    guideText.textContent = "Tap to start new";
+                } else {
+                    statusDiv.textContent = "Server error.";
+                    statusDiv.className = "error";
+                }
+            } catch (err) {
+                statusDiv.textContent = "Network error.";
+                statusDiv.className = "error";
+            }
+        }
+
+        btn.addEventListener('click', toggleRecording);
+    </script>
+</body>
+</html>
