@@ -91,7 +91,7 @@ async def analyze_audio_task(incident_id: str, file_bytes: bytes, content_type: 
       "silent_alert": bool
     }
     """
-    model = genai.GenerativeModel("gemini-2.5-flash")
+    model = genai.GenerativeModel("gemini-2.5-flash") # Deploy Test
     # New Test
     try:
         response = model.generate_content([{"mime_type": content_type, "data": file_bytes}, prompt])
