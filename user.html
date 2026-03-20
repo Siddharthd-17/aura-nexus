@@ -2,9 +2,22 @@
 <html>
 <head>
     <title>Aura Nexus - Emergency Beacon</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <style>
-        body { margin: 0; background: #0b0c10; color: #45a29e; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; user-select: none; -webkit-user-select: none; }
-        .container { text-align: center; background: #1f2833; padding: 40px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 1px solid #45a29e; width: 320px; position: relative;}
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap');
+        
+        body { margin: 0; background: #0b0c10; color: #45a29e; font-family: 'Outfit', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; user-select: none; -webkit-user-select: none; }
+        .container { text-align: center; background: rgba(31, 40, 51, 0.8); backdrop-filter: blur(10px); padding: 40px; border-radius: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); border: 1px solid rgba(102, 252, 241, 0.1); width: 340px; position: relative; animation: fade-in 0.8s ease-out; }
+        @keyframes fade-in { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        
+        h1 { font-weight: 600; letter-spacing: 5px; color: #66fcf1; margin-bottom: 5px; }
+        #version { font-size: 0.6em; color: #45a29e; background: rgba(11, 12, 16, 0.5); display: inline-block; padding: 4px 12px; border-radius: 50px; margin-bottom: 20px; letter-spacing: 1px; border: 1px solid rgba(102, 252, 241, 0.2); }
+        
+        .secure-badge { position: absolute; top: 15px; left: 15px; font-size: 0.6em; color: #66fcf1; display: flex; align-items: center; gap: 5px; opacity: 0.8; }
+        .secure-badge svg { width: 10px; height: 10px; fill: #66fcf1; }
+        
+        .signout { position: absolute; top: 20px; right: 20px; color: #ff4e50; text-decoration: none; font-size: 0.8em; border: 1px solid rgba(255, 78, 80, 0.3); padding: 6px 14px; border-radius: 50px; transition: all 0.3s; }
+        .signout:hover { background: rgba(255, 78, 80, 0.1); border-color: #ff4e50; }
         
         #recordBtn { width: 120px; height: 120px; border-radius: 50%; border: 4px solid #ff4e50; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.3s; margin: 20px auto; position: relative; z-index: 2; touch-action: none; }
         #recordBtn.recording { border-color: #66fcf1; background: rgba(102, 252, 241, 0.1); animation: pulse 1.5s infinite; }
@@ -33,6 +46,11 @@
 
         .signout { position: absolute; top: 20px; right: 20px; color: #ff4e50; text-decoration: none; font-size: 0.8em; border: 1px solid #ff4e50; padding: 5px 10px; border-radius: 4px; }
         
+        #map { width: 100%; height: 180px; margin-top: 15px; border-radius: 12px; border: 1px solid #45a29e; display: none; }
+        .resp-marker { width: 24px; height: 24px; background: #66fcf1; border: 2px solid #0b0c10; border-radius: 50%; box-shadow: 0 0 10px #66fcf1; }
+        
+        .divider { margin: 25px 0; border-bottom: 1px solid #333; position: relative; }
+        
         .divider { margin: 25px 0; border-bottom: 1px solid #333; position: relative; }
         .divider::after { content: "OR USE TEXT"; position: absolute; top: -8px; left: 50%; transform: translateX(-50%); background: #1f2833; padding: 0 10px; font-size: 0.6em; color: #888; }
         
@@ -44,19 +62,24 @@
     </style>
 </head>
 <body>
-    <a href="/" class="signout">SIGN OUT</a>
-    <div class="container">
+    <a href="/logout" class="signout">SIGN OUT</a>
+    <div class="container" role="main">
+        <div class="secure-badge">
+            <svg viewBox="0 0 24 24"><path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/></svg>
+            SECURE PROTOCOL
+        </div>
         <h1>AURA NEXUS</h1>
-        <div id="version">Build: v1.3.1 (Live Debug)</div>
+        <div id="version">PROTOCOL v1.4.0 (Hackathon Edition)</div>
         <p id="guideText">Tap to start recording</p>
         
-        <div id="timer">00:00</div>
+        <div id="timer" aria-live="polite">00:00</div>
 
-        <div id="recordBtn">
-            <svg class="mic-icon" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
-        </div>
+        <button id="recordBtn" aria-label="Start Emergency Voice Recording" title="Tap to Record">
+            <svg class="mic-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+        </button>
 
         <canvas id="visualizer"></canvas>
+        <div id="map"></div>
 
         <div class="divider"></div>
 
@@ -69,6 +92,9 @@
         <div id="debug"></div>
     </div>
 
+    </div>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script>
         let mediaRecorder;
         let audioChunks = [];
@@ -76,6 +102,7 @@
         let audioContext, analyser, dataArray, animationId;
         let recordingStartTime;
         let timerInterval;
+        let map, userMarker, respMarker, trackInterval;
 
         window.addEventListener('load', () => {
             log("App Load. Secure: " + window.isSecureContext);
@@ -211,6 +238,34 @@
             }
         }
 
+        function initMap() {
+            if (map) return;
+            document.getElementById('map').style.display = 'block';
+            map = L.map('map').setView([lat, lng], 13);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+            userMarker = L.marker([lat, lng]).addTo(map).bindPopup("Your Location");
+        }
+
+        async function startTracking(responderId) {
+            if (!responderId) return;
+            if (trackInterval) clearInterval(trackInterval);
+            trackInterval = setInterval(async () => {
+                try {
+                    const res = await fetch('/responders');
+                    const responders = await res.json();
+                    const r = responders.find(item => item.id === responderId);
+                    if (r) {
+                        if (!respMarker) {
+                            const icon = L.divIcon({className: 'resp-marker', iconSize: [24,24]});
+                            respMarker = L.marker([r.lat, r.lng], {icon}).addTo(map).bindPopup("First Responder (Approaching)");
+                        } else {
+                            respMarker.setLatLng([r.lat, r.lng]);
+                        }
+                    }
+                } catch(e) {}
+            }, 5000);
+        }
+
         async function sendData() {
             const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
             log("Final size: " + audioBlob.size + " bytes");
@@ -229,14 +284,16 @@
             formData.append('lng', lng);
 
             statusDiv.textContent = "ENCRYPTING & SENDING...";
+            initMap(); // Start map on submission
 
             try {
                 const response = await fetch('/dispatch', { method: 'POST', body: formData });
                 if (response.ok) {
                     const data = await response.json();
-                    statusDiv.innerHTML = `SUCCESS.<br>ID: ${data.incident_id.substring(0,8)}`;
+                    statusDiv.innerHTML = `SUCCESS.<br>RESPONDER DISPATCHED`;
                     statusDiv.className = "success";
-                    guideText.textContent = "Tap to start new";
+                    guideText.textContent = "Help is on the way";
+                    startTracking(data.responder_id || data.incident_id); // Fallback logic
                 } else {
                     statusDiv.textContent = "Server error.";
                     statusDiv.className = "error";
@@ -262,14 +319,16 @@
 
             statusDiv.textContent = "SENDING SECURE TEXT...";
             statusDiv.className = "";
+            initMap();
 
             try {
                 const response = await fetch('/dispatch', { method: 'POST', body: formData });
                 if (response.ok) {
                     const data = await response.json();
-                    statusDiv.innerHTML = `SUCCESS.<br>ID: ${data.incident_id.substring(0,8)}`;
+                    statusDiv.innerHTML = `SUCCESS.<br>RESPONDER DISPATCHED`;
                     statusDiv.className = "success";
                     document.getElementById('emergencyText').value = "";
+                    startTracking(data.responder_id);
                 } else {
                     statusDiv.textContent = "Server error.";
                     statusDiv.className = "error";
